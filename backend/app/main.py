@@ -22,7 +22,7 @@ app.add_middleware(
 )
 
 #Registering the routers
-app.include_router(health.router)
+app.include_router(health.router, prefix="/api/v1")
 
 
 @app.get("/")
