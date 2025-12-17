@@ -1,45 +1,58 @@
-from typing import List, Dict, Tuple
-import pandas as pd
+import json
+from pathlib import Path
+from typing import Dict, List
 
-class DataSevice:
+
+class DataService:
     """
-    Fetching and caching market data
+    Service responsible for retrieving company metadata
+    from a local JSON source.
     """
-    
-    def __init__(self, cach_ttl: int = 3600):
-        self.cache_ttl = cach_ttl
-        self._price_cache = {}
-        self._info_cache = {}
-        
-    async def fetch_portfolio_data(
-        self,
-        tickers: List[str],
-        period: str = "1y"
-    ) -> Tuple[pd.DataFrame, dict[str, str]]:
+
+    def __init__(self):
+        self.data_path = (
+            Path(__file__).resolve().parent.parent / "data" / "company_metadata.json"
+        )
+        self._load_data()
+
+    def _load_data(self):
+        if not self.data_path.exists():
+            raise FileNotFoundError(
+                f"company_metadata.json not found at {self.data_path}"
+            )
+
+        with open(self.data_path, "r") as f:
+            self.company_data = json.load(f)
+
+    def get_company_metadata(self, tickers: List[str]) -> Dict[str, Dict]:
         """
-        Historical pricing and sector info for the list of tickers
-        
-        :param self: Description
-        :param tickers: Description
-        :type tickers: List[str]
-        :param period: Description
-        :type period: str
-        :return: Description
-        :rtype: Tuple[DataFrame, dict[str, str]]
+        Returns metadata for valid tickers.
+        Invalid tickers are skipped.
         """
-        
-        raise NotImplementedError
-    
-    async def validate_tickers(self, tickers: List[str]) -> Dict[str, List[str]]:
+        result = {}
+
+        for ticker in tickers:
+            ticker = ticker.upper()
+            if ticker in self.company_data:
+                result[ticker] = self.company_data[ticker]
+
+        return result
+
+    def validate_tickers(self, tickers: List[str]) -> Dict[str, List[str]]:
         """
-        Validates ticker symbols,
-        returns valid and invalid symbols
-        
-        :param self: Description
-        :param tickers: Description
-        :type tickers: List[str]
-        :return: Description
-        :rtype: Dict[str, List[str]]
+        Splits tickers into valid and invalid lists.
         """
-        
-        raise NotImplementedError
+        valid = []
+        invalid = []
+
+        for ticker in tickers:
+            ticker = ticker.upper()
+            if ticker in self.company_data:
+                valid.append(ticker)
+            else:
+                invalid.append(ticker)
+
+        return {
+            "valid": valid,
+            "invalid": invalid
+        }

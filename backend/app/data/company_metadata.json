@@ -1,0 +1,44 @@
+{
+  "AAPL": {
+    "name": "Apple Inc.",
+    "sector": "Technology",
+    "industry": "Consumer Electronics",
+    "risk_profile": "Medium",
+    "growth_profile": "High"
+  },
+  "MSFT": {
+    "name": "Microsoft Corporation",
+    "sector": "Technology",
+    "industry": "Software",
+    "risk_profile": "Low",
+    "growth_profile": "High"
+  },
+  "GOOGL": {
+    "name": "Alphabet Inc.",
+    "sector": "Communication Services",
+    "industry": "Internet Content & Information",
+    "risk_profile": "Medium",
+    "growth_profile": "High"
+  },
+  "AMZN": {
+    "name": "Amazon.com Inc.",
+    "sector": "Consumer Discretionary",
+    "industry": "E-Commerce",
+    "risk_profile": "High",
+    "growth_profile": "High"
+  },
+  "JPM": {
+    "name": "JPMorgan Chase & Co.",
+    "sector": "Financials",
+    "industry": "Banking",
+    "risk_profile": "Medium",
+    "growth_profile": "Medium"
+  },
+  "XOM": {
+    "name": "Exxon Mobil Corporation",
+    "sector": "Energy",
+    "industry": "Oil & Gas",
+    "risk_profile": "High",
+    "growth_profile": "Low"
+  }
+}
