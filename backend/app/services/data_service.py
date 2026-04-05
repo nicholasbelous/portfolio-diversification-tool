@@ -11,7 +11,7 @@ class DataService:
 
     def __init__(self):
         self.data_path = (
-            Path(__file__).resolve().parent.parent / "data" / "company_metadata.json"
+            Path(__file__).resolve().parent.parent / "data" / "static" / "company_metadata.json"
         )
         self._load_data()
 
@@ -21,7 +21,7 @@ class DataService:
                 f"company_metadata.json not found at {self.data_path}"
             )
 
-        with open(self.data_path, "r") as f:
+        with open(self.data_path, "r", encoding="utf-8") as f:
             self.company_data = json.load(f)
 
     def get_company_metadata(self, tickers: List[str]) -> Dict[str, Dict]:
