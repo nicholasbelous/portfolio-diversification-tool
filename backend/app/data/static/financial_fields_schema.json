@@ -1,60 +1,50 @@
 {
-  "version": "1.0",
-  "description": "Required financial data fields for portfolio analysis.",
+  "version": "2.0-lean",
+  "description": "Lean required financial fields for diversification and risk analytics.",
   "required_fields": [
+    {
+      "name": "ticker",
+      "group": "identity",
+      "description": "Stock ticker symbol."
+    },
+    {
+      "name": "name",
+      "group": "identity",
+      "description": "Company name."
+    },
+    {
+      "name": "sector",
+      "group": "identity",
+      "description": "Company sector for diversification analysis."
+    },
+    {
+      "name": "industry",
+      "group": "identity",
+      "description": "Company industry classification."
+    },
     {
       "name": "market_cap",
       "group": "fundamentals",
       "description": "Total equity market value."
     },
     {
-      "name": "enterprise_value",
-      "group": "fundamentals",
-      "description": "Firm value including debt and cash effects."
+      "name": "beta",
+      "group": "risk",
+      "description": "Sensitivity to market movements."
     },
     {
       "name": "trailing_pe",
       "group": "valuation",
-      "description": "Price to earnings ratio using trailing earnings."
-    },
-    {
-      "name": "forward_pe",
-      "group": "valuation",
-      "description": "Price to expected forward earnings."
+      "description": "Trailing price to earnings ratio."
     },
     {
       "name": "price_to_book",
       "group": "valuation",
-      "description": "Price to book value ratio."
-    },
-    {
-      "name": "eps_ttm",
-      "group": "fundamentals",
-      "description": "Trailing twelve-month earnings per share."
-    },
-    {
-      "name": "dividend_yield",
-      "group": "income",
-      "description": "Annual dividend yield."
-    },
-    {
-      "name": "beta",
-      "group": "risk",
-      "description": "Sensitivity to market movement."
-    },
-    {
-      "name": "revenue_growth",
-      "group": "growth",
-      "description": "Revenue growth rate."
-    },
-    {
-      "name": "earnings_growth",
-      "group": "growth",
-      "description": "Earnings growth rate."
+      "description": "Price to book ratio."
     },
     {
       "name": "debt_to_equity",
-      "group": "balance_sheet",
+      "group": "risk",
       "description": "Leverage ratio."
     },
     {
@@ -63,69 +53,29 @@
       "description": "Net income margin."
     },
     {
-      "name": "operating_margin",
-      "group": "profitability",
-      "description": "Operating income margin."
-    },
-    {
-      "name": "return_on_equity",
-      "group": "profitability",
-      "description": "Return on shareholders' equity."
-    },
-    {
-      "name": "return_on_assets",
-      "group": "profitability",
-      "description": "Return on assets."
-    },
-    {
-      "name": "free_cash_flow",
-      "group": "cash_flow",
-      "description": "Free cash flow amount."
-    },
-    {
-      "name": "total_revenue",
-      "group": "fundamentals",
-      "description": "Total revenue."
-    },
-    {
       "name": "latest_close",
       "group": "price",
-      "description": "Latest close price from history."
+      "description": "Latest close price."
     },
     {
       "name": "return_1m",
       "group": "price",
-      "description": "Approximate 1 month price return."
+      "description": "Approximate 1 month return."
     },
     {
       "name": "return_3m",
       "group": "price",
-      "description": "Approximate 3 month price return."
-    },
-    {
-      "name": "return_6m",
-      "group": "price",
-      "description": "Approximate 6 month price return."
+      "description": "Approximate 3 month return."
     },
     {
       "name": "return_1y",
       "group": "price",
-      "description": "Approximate 1 year price return."
+      "description": "Approximate 1 year return."
     },
     {
       "name": "volatility_1y",
       "group": "risk",
-      "description": "Annualized volatility from daily returns."
-    },
-    {
-      "name": "high_52w",
-      "group": "price",
-      "description": "Rolling 52-week high from history."
-    },
-    {
-      "name": "low_52w",
-      "group": "price",
-      "description": "Rolling 52-week low from history."
+      "description": "Annualized volatility based on daily closes."
     }
   ]
 }

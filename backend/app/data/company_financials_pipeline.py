@@ -9,6 +9,7 @@ from app.services.financial_data_service import FinancialDataService
 ROOT_DIR = Path(__file__).resolve().parent
 DEFAULT_METADATA_PATH = ROOT_DIR / "static" / "company_metadata.json"
 DEFAULT_OUTPUT_PATH = ROOT_DIR / "static" / "company_financials.json"
+DEFAULT_DB_PATH = ROOT_DIR / "static" / "portfolio_data.db"
 
 
 def _load_tickers_from_metadata(path: Path) -> List[str]:
@@ -45,6 +46,11 @@ def _parse_args() -> argparse.Namespace:
         "--output",
         default=str(DEFAULT_OUTPUT_PATH),
         help="Path to financial output JSON",
+    )
+    parser.add_argument(
+        "--db-path",
+        default=str(DEFAULT_DB_PATH),
+        help="Path to SQLite database file",
     )
     parser.add_argument(
         "--force-refresh",
@@ -84,6 +90,7 @@ def main() -> None:
 
     service = FinancialDataService(
         output_path=Path(args.output).resolve(),
+        db_path=Path(args.db_path).resolve(),
         delay_seconds=max(0.0, args.delay_seconds),
         max_retries=max(1, args.max_retries),
         verbose=not args.quiet,
@@ -92,6 +99,7 @@ def main() -> None:
     result = service.fetch_and_store(tickers=tickers, force_refresh=args.force_refresh)
 
     print(f"Saved {len(result.saved)} ticker snapshot(s) to {Path(args.output).resolve()}")
+    print(f"SQLite database: {Path(args.db_path).resolve()}")
     if result.saved:
         print("Saved:", ", ".join(sorted(result.saved.keys())))
     if result.skipped:

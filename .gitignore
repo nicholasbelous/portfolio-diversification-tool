@@ -8,3 +8,4 @@ node_modules/
 .mypy_cache/
 .DS_Store
 backend/app/data/cache/
+backend/app/data/static/portfolio_data.db
