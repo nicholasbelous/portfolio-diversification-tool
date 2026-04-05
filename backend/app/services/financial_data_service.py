@@ -38,6 +38,7 @@ class FinancialDataService:
         sp500_reference_path: Optional[Path] = None,
         schema_path: Optional[Path] = None,
         delay_seconds: float = 1.0,
+        per_ticker_delay_seconds: float = 0.0,
         max_retries: int = 4,
         verbose: bool = True,
     ):
@@ -51,13 +52,17 @@ class FinancialDataService:
             sec_ticker_map_cache_path or data_root / "cache" / "sec_ticker_map.json"
         )
         self.delay_seconds = delay_seconds
+        self.per_ticker_delay_seconds = per_ticker_delay_seconds
         self.max_retries = max_retries
         self.verbose = verbose
         self._yahoo_rate_limited = False
+        self._sec_ticker_map: Optional[Dict[str, str]] = None
         self._sec_user_agent = os.getenv(
             "SEC_USER_AGENT",
             "PortfolioDiversificationTool/1.0 (contact@example.com)",
         )
+        self._http = requests.Session()
+        self._http.headers.update({"User-Agent": "Mozilla/5.0"})
         self._metadata_context = self._load_metadata_context()
 
         migrations_dir = Path(__file__).resolve().parent.parent / "db" / "migrations"
@@ -136,7 +141,7 @@ class FinancialDataService:
             f"?range={range_value}&interval={interval}"
         )
         headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-        response = requests.get(url, headers=headers, timeout=30)
+        response = self._http.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         payload = response.json()
 
@@ -241,7 +246,7 @@ class FinancialDataService:
         headers = {"User-Agent": self._sec_user_agent, "Accept": "application/json"}
         for attempt in range(self.max_retries):
             try:
-                response = requests.get(url, headers=headers, timeout=30)
+                response = self._http.get(url, headers=headers, timeout=30)
                 response.raise_for_status()
                 return response.json()
             except Exception as exc:
@@ -251,9 +256,13 @@ class FinancialDataService:
         raise RuntimeError(f"SEC request failed after retries: {last_exc}")
 
     def _load_sec_ticker_map(self) -> Dict[str, str]:
+        if self._sec_ticker_map is not None:
+            return self._sec_ticker_map
+
         cached = self._load_json_dict(self.sec_ticker_map_cache_path)
         if cached:
-            return {k.upper(): str(v) for k, v in cached.items()}
+            self._sec_ticker_map = {k.upper(): str(v) for k, v in cached.items()}
+            return self._sec_ticker_map
 
         url = "https://www.sec.gov/files/company_tickers.json"
         raw = self._sec_get_with_retry(url)
@@ -264,6 +273,7 @@ class FinancialDataService:
             if ticker and cik_num:
                 mapping[ticker] = str(cik_num).zfill(10)
         self._save_json_dict(self.sec_ticker_map_cache_path, mapping)
+        self._sec_ticker_map = mapping
         return mapping
 
     @staticmethod
@@ -520,5 +530,7 @@ class FinancialDataService:
             self._save_json_dict(self.output_path, json_store)
             saved[ticker] = snapshot
             self._log(f"[{ticker}] saved lean snapshot")
+            if self.per_ticker_delay_seconds > 0:
+                time.sleep(self.per_ticker_delay_seconds)
 
         return FinancialFetchResult(saved=saved, failed=failed, skipped=skipped)
