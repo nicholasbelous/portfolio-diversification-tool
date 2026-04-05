@@ -57,6 +57,7 @@ class FinancialDataService:
         self.verbose = verbose
         self._yahoo_rate_limited = False
         self._sec_ticker_map: Optional[Dict[str, str]] = None
+        self._benchmark_close_cache: Dict[tuple[str, str], pd.Series] = {}
         self._sec_user_agent = os.getenv(
             "SEC_USER_AGENT",
             "PortfolioDiversificationTool/1.0 (contact@example.com)",
@@ -240,6 +241,69 @@ class FinancialDataService:
             "return_1y": self._price_return(close, 252),
             "volatility_1y": volatility,
         }
+
+    def _get_benchmark_close_series(
+        self,
+        period: str = "1y",
+        interval: str = "1d",
+    ) -> Optional[pd.Series]:
+        cache_key = (period, interval)
+        if cache_key in self._benchmark_close_cache:
+            return self._benchmark_close_cache[cache_key]
+
+        benchmark_candidates = ["^GSPC", "SPY"]
+        for candidate in benchmark_candidates:
+            try:
+                history, source = self._fetch_history_with_retry(
+                    ticker=candidate,
+                    period=period,
+                    interval=interval,
+                )
+                close = history["Close"].dropna()
+                if close.empty:
+                    continue
+                self._benchmark_close_cache[cache_key] = close
+                self._log(f"[beta] benchmark {candidate} loaded via {source}")
+                return close
+            except Exception as exc:
+                self._log(f"[beta] benchmark {candidate} unavailable: {exc}")
+                continue
+        return None
+
+    def _compute_beta_from_history(
+        self,
+        stock_history: pd.DataFrame,
+        period: str = "1y",
+        interval: str = "1d",
+    ) -> Optional[float]:
+        benchmark_close = self._get_benchmark_close_series(period=period, interval=interval)
+        if benchmark_close is None:
+            return None
+
+        stock_close = stock_history["Close"].dropna()
+        if stock_close.empty:
+            return None
+
+        stock_returns = stock_close.pct_change().dropna()
+        market_returns = benchmark_close.pct_change().dropna()
+        aligned = pd.concat(
+            [stock_returns.rename("stock"), market_returns.rename("market")],
+            axis=1,
+            join="inner",
+        ).dropna()
+
+        if len(aligned) < 30:
+            return None
+
+        market_var = aligned["market"].var()
+        if market_var is None or market_var == 0 or pd.isna(market_var):
+            return None
+
+        beta = aligned["stock"].cov(aligned["market"]) / market_var
+        if pd.isna(beta):
+            return None
+
+        return float(beta)
 
     def _sec_get_with_retry(self, url: str) -> Dict[str, Any]:
         last_exc: Exception | None = None
@@ -516,6 +580,14 @@ class FinancialDataService:
             if fundamentals is None:
                 fundamentals = {"name": ticker}
                 source_fundamentals = "unavailable"
+
+            computed_beta = self._compute_beta_from_history(
+                stock_history=history,
+                period="1y",
+                interval="1d",
+            )
+            if computed_beta is not None:
+                fundamentals["beta"] = computed_beta
 
             snapshot = self._build_snapshot(
                 ticker=ticker,
