@@ -13,20 +13,8 @@ from app.services.financial_data_service import FinancialDataService
 
 
 ROOT_DIR = Path(__file__).resolve().parent
-DEFAULT_METADATA_PATH = ROOT_DIR / "static" / "company_metadata.json"
 DEFAULT_OUTPUT_PATH = ROOT_DIR / "static" / "company_financials.json"
 DEFAULT_SP500_REFERENCE_PATH = ROOT_DIR / "cache" / "sp500_reference.json"
-
-
-def _load_tickers_from_metadata(path: Path) -> List[str]:
-    if not path.exists():
-        return []
-    with open(path, "r", encoding="utf-8") as f:
-        payload = json.load(f)
-    if not isinstance(payload, dict):
-        return []
-    return sorted([str(t).upper() for t in payload.keys() if str(t).strip()])
-
 
 def _load_tickers_from_sp500_reference(path: Path) -> List[str]:
     if not path.exists():
@@ -65,11 +53,6 @@ def _parse_args() -> argparse.Namespace:
         help="Ticker symbols (example: AAPL MSFT NVDA)",
     )
     parser.add_argument(
-        "--from-metadata-file",
-        action="store_true",
-        help="Load ticker list from company_metadata.json keys",
-    )
-    parser.add_argument(
         "--from-sp500-reference",
         action="store_true",
         help="Load ticker list from cached S&P 500 reference file",
@@ -78,11 +61,6 @@ def _parse_args() -> argparse.Namespace:
         "--tickers-file",
         required=False,
         help="Path to file containing ticker symbols (comma/newline/space separated)",
-    )
-    parser.add_argument(
-        "--metadata-path",
-        default=str(DEFAULT_METADATA_PATH),
-        help="Path to metadata JSON file used with --from-metadata-file",
     )
     parser.add_argument(
         "--sp500-reference-path",
@@ -155,16 +133,13 @@ def main() -> None:
     if args.tickers_file:
         file_tickers = _load_tickers_from_file(Path(args.tickers_file).resolve())
         tickers = list(dict.fromkeys(tickers + file_tickers))
-    if args.from_metadata_file:
-        metadata_tickers = _load_tickers_from_metadata(Path(args.metadata_path).resolve())
-        tickers = list(dict.fromkeys(tickers + metadata_tickers))
     if args.from_sp500_reference:
         sp500_tickers = _load_tickers_from_sp500_reference(Path(args.sp500_reference_path).resolve())
         tickers = list(dict.fromkeys(tickers + sp500_tickers))
 
     if not tickers:
         raise SystemExit(
-            "No tickers provided. Use --tickers, --tickers-file, --from-metadata-file, and/or --from-sp500-reference."
+            "No tickers provided. Use --tickers, --tickers-file, and/or --from-sp500-reference."
         )
 
     if args.limit and args.limit > 0:
@@ -209,6 +184,7 @@ def main() -> None:
     print(f"Saved {len(result.saved)} ticker snapshot(s) to {Path(args.output).resolve()}")
     print(f"Postgres database: {redact_database_url(database_url)}")
     print(f"DB snapshots total: {service.store.count_financial_snapshots()}")
+    print(f"DB price_history rows total: {service.store.count_price_history_rows()}")
     if result.saved:
         print("Saved:", ", ".join(sorted(result.saved.keys())))
     if result.skipped:

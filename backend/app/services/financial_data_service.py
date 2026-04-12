@@ -34,7 +34,6 @@ class FinancialDataService:
         output_path: Optional[Path] = None,
         database_url: Optional[str] = None,
         sec_ticker_map_cache_path: Optional[Path] = None,
-        metadata_path: Optional[Path] = None,
         sp500_reference_path: Optional[Path] = None,
         schema_path: Optional[Path] = None,
         delay_seconds: float = 1.0,
@@ -46,7 +45,6 @@ class FinancialDataService:
         self.output_path = output_path or data_root / "static" / "company_financials.json"
         self.database_url = get_database_url(database_url)
         self.schema_path = schema_path or data_root / "static" / "financial_fields_schema.json"
-        self.metadata_path = metadata_path or data_root / "static" / "company_metadata.json"
         self.sp500_reference_path = sp500_reference_path or data_root / "cache" / "sp500_reference.json"
         self.sec_ticker_map_cache_path = (
             sec_ticker_map_cache_path or data_root / "cache" / "sec_ticker_map.json"
@@ -103,18 +101,7 @@ class FinancialDataService:
             json.dump(data, f, indent=2, sort_keys=True)
 
     def _load_metadata_context(self) -> Dict[str, Dict[str, str]]:
-        payload = self._load_json_dict(self.metadata_path)
         context: Dict[str, Dict[str, str]] = {}
-        for ticker, row in payload.items():
-            if not isinstance(row, dict):
-                continue
-            symbol = str(ticker).upper()
-            context[symbol] = {
-                "name": str(row.get("name") or symbol),
-                "sector": str(row.get("sector") or "Unknown"),
-                "industry": str(row.get("industry") or "Unknown"),
-            }
-
         sp500_payload = self._load_json_dict(self.sp500_reference_path)
         for ticker, row in sp500_payload.items():
             if not isinstance(row, dict):
@@ -534,6 +521,38 @@ class FinancialDataService:
         self.store.upsert_company(company_row)
         self.store.upsert_financial_snapshot(financial_row)
 
+    def _persist_price_history(
+        self,
+        ticker: str,
+        history: pd.DataFrame,
+        source_prices: str,
+        updated_at_iso: str,
+    ) -> None:
+        close = history["Close"].dropna()
+        if close.empty:
+            return
+
+        updated_at = datetime.fromisoformat(updated_at_iso)
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=timezone.utc)
+
+        rows: List[Dict[str, Any]] = []
+        for ts, close_value in close.items():
+            if pd.isna(close_value):
+                continue
+            trading_date = pd.Timestamp(ts).date()
+            rows.append(
+                {
+                    "ticker": ticker,
+                    "trading_date": trading_date,
+                    "close": float(close_value),
+                    "source_prices": source_prices,
+                    "updated_at": updated_at,
+                }
+            )
+
+        self.store.upsert_price_history(rows)
+
     def fetch_and_store(
         self,
         tickers: List[str],
@@ -603,6 +622,12 @@ class FinancialDataService:
             )
 
             self._persist_snapshot(snapshot)
+            self._persist_price_history(
+                ticker=ticker,
+                history=history,
+                source_prices=source_prices,
+                updated_at_iso=snapshot["updated_at"],
+            )
             db_existing_tickers.add(ticker)
             json_store[ticker] = snapshot
             self._save_json_dict(self.output_path, json_store)

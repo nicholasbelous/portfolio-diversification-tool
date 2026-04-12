@@ -6,7 +6,7 @@ Run the commands below from the `backend/` directory.
 ### 1) Set environment variable
 
 ```bash
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/portfolio_diversification"
+export DATABASE_URL="postgresql://<user>:<password>@localhost:5432/portfolio_diversification"
 ```
 
 ### 2) Run migrations
@@ -25,7 +25,7 @@ Optional override:
 
 ```bash
 python -m app.data.company_financials_pipeline \
-  --database-url "postgresql://postgres:postgres@localhost:5432/portfolio_diversification" \
+  --database-url "postgresql://<user>:<password>@localhost:5432/portfolio_diversification" \
   --from-sp500-reference
 ```
 
@@ -39,7 +39,18 @@ python -m app.data.company_financials_pipeline \
 ```sql
 SELECT COUNT(*) AS companies FROM companies;
 SELECT COUNT(*) AS snapshots FROM financial_snapshots;
+SELECT COUNT(*) AS price_history_rows FROM price_history_daily;
 SELECT COUNT(*) AS beta_populated
 FROM financial_snapshots
 WHERE beta IS NOT NULL;
 ```
+
+## API Endpoints
+
+After running the API (`uvicorn app.main:app --reload`), these are available:
+
+- `GET /api/v1/health`
+- `GET /api/v1/financials/{ticker}`
+- `GET /api/v1/financials/top-volatility?limit=25`
+- `GET /api/v1/financials/top-beta?limit=25`
+- `GET /api/v1/financials/{ticker}/history?start_date=2025-01-01&end_date=2026-01-01`
