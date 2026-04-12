@@ -3,25 +3,25 @@ CREATE TABLE IF NOT EXISTS companies (
     name TEXT NOT NULL,
     sector TEXT,
     industry TEXT,
-    updated_at TEXT NOT NULL
+    updated_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS financial_snapshots (
     ticker TEXT PRIMARY KEY,
-    market_cap REAL,
-    beta REAL,
-    trailing_pe REAL,
-    price_to_book REAL,
-    debt_to_equity REAL,
-    profit_margin REAL,
-    latest_close REAL,
-    return_1m REAL,
-    return_3m REAL,
-    return_1y REAL,
-    volatility_1y REAL,
+    market_cap DOUBLE PRECISION,
+    beta DOUBLE PRECISION,
+    trailing_pe DOUBLE PRECISION,
+    price_to_book DOUBLE PRECISION,
+    debt_to_equity DOUBLE PRECISION,
+    profit_margin DOUBLE PRECISION,
+    latest_close DOUBLE PRECISION,
+    return_1m DOUBLE PRECISION,
+    return_3m DOUBLE PRECISION,
+    return_1y DOUBLE PRECISION,
+    volatility_1y DOUBLE PRECISION,
     source_fundamentals TEXT NOT NULL,
     source_prices TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
     FOREIGN KEY (ticker) REFERENCES companies(ticker) ON DELETE CASCADE
 );
 

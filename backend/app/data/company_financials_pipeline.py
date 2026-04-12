@@ -4,13 +4,17 @@ from pathlib import Path
 from typing import List
 import time
 
+try:
+    from app.db import get_database_url, redact_database_url
+except ModuleNotFoundError:  # pragma: no cover - allows running from repo root
+    from backend.app.db import get_database_url, redact_database_url
+
 from app.services.financial_data_service import FinancialDataService
 
 
 ROOT_DIR = Path(__file__).resolve().parent
 DEFAULT_METADATA_PATH = ROOT_DIR / "static" / "company_metadata.json"
 DEFAULT_OUTPUT_PATH = ROOT_DIR / "static" / "company_financials.json"
-DEFAULT_DB_PATH = ROOT_DIR / "static" / "portfolio_data.db"
 DEFAULT_SP500_REFERENCE_PATH = ROOT_DIR / "cache" / "sp500_reference.json"
 
 
@@ -91,9 +95,9 @@ def _parse_args() -> argparse.Namespace:
         help="Path to financial output JSON",
     )
     parser.add_argument(
-        "--db-path",
-        default=str(DEFAULT_DB_PATH),
-        help="Path to SQLite database file",
+        "--database-url",
+        required=False,
+        help="Postgres database URL. If omitted, uses DATABASE_URL env var.",
     )
     parser.add_argument(
         "--force-refresh",
@@ -166,9 +170,11 @@ def main() -> None:
     if args.limit and args.limit > 0:
         tickers = tickers[: args.limit]
 
+    database_url = get_database_url(args.database_url)
+
     service = FinancialDataService(
         output_path=Path(args.output).resolve(),
-        db_path=Path(args.db_path).resolve(),
+        database_url=database_url,
         delay_seconds=max(0.0, args.delay_seconds),
         per_ticker_delay_seconds=max(0.0, args.per_ticker_delay_seconds),
         max_retries=max(1, args.max_retries),
@@ -201,7 +207,7 @@ def main() -> None:
     )
 
     print(f"Saved {len(result.saved)} ticker snapshot(s) to {Path(args.output).resolve()}")
-    print(f"SQLite database: {Path(args.db_path).resolve()}")
+    print(f"Postgres database: {redact_database_url(database_url)}")
     if result.saved:
         print("Saved:", ", ".join(sorted(result.saved.keys())))
     if result.skipped:

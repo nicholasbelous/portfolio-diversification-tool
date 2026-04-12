@@ -11,9 +11,9 @@ import requests
 import yfinance as yf
 
 try:
-    from app.db import SQLiteStore
+    from app.db import PostgresStore, get_database_url
 except ModuleNotFoundError:  # pragma: no cover - allows running from repo root
-    from backend.app.db import SQLiteStore
+    from backend.app.db import PostgresStore, get_database_url
 
 
 @dataclass
@@ -26,13 +26,13 @@ class FinancialFetchResult:
 class FinancialDataService:
     """
     Lean financial data service.
-    Pulls only required fields and persists them to SQLite + lightweight JSON.
+    Pulls only required fields and persists them to Postgres + lightweight JSON.
     """
 
     def __init__(
         self,
         output_path: Optional[Path] = None,
-        db_path: Optional[Path] = None,
+        database_url: Optional[str] = None,
         sec_ticker_map_cache_path: Optional[Path] = None,
         metadata_path: Optional[Path] = None,
         sp500_reference_path: Optional[Path] = None,
@@ -44,7 +44,7 @@ class FinancialDataService:
     ):
         data_root = Path(__file__).resolve().parent.parent / "data"
         self.output_path = output_path or data_root / "static" / "company_financials.json"
-        self.db_path = db_path or data_root / "static" / "portfolio_data.db"
+        self.database_url = get_database_url(database_url)
         self.schema_path = schema_path or data_root / "static" / "financial_fields_schema.json"
         self.metadata_path = metadata_path or data_root / "static" / "company_metadata.json"
         self.sp500_reference_path = sp500_reference_path or data_root / "cache" / "sp500_reference.json"
@@ -67,7 +67,7 @@ class FinancialDataService:
         self._metadata_context = self._load_metadata_context()
 
         migrations_dir = Path(__file__).resolve().parent.parent / "db" / "migrations"
-        self.store = SQLiteStore(db_path=self.db_path, migrations_dir=migrations_dir)
+        self.store = PostgresStore(database_url=self.database_url, migrations_dir=migrations_dir)
 
     def _log(self, message: str) -> None:
         if self.verbose:
@@ -502,12 +502,16 @@ class FinancialDataService:
         }
 
     def _persist_snapshot(self, snapshot: Dict[str, Any]) -> None:
+        updated_at = datetime.fromisoformat(snapshot["updated_at"])
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=timezone.utc)
+
         company_row = {
             "ticker": snapshot["ticker"],
             "name": snapshot["name"],
             "sector": snapshot["sector"],
             "industry": snapshot["industry"],
-            "updated_at": snapshot["updated_at"],
+            "updated_at": updated_at,
         }
         financial_row = {
             "ticker": snapshot["ticker"],
@@ -524,7 +528,7 @@ class FinancialDataService:
             "volatility_1y": snapshot["volatility_1y"],
             "source_fundamentals": snapshot["source_fundamentals"],
             "source_prices": snapshot["source_prices"],
-            "updated_at": snapshot["updated_at"],
+            "updated_at": updated_at,
         }
 
         self.store.upsert_company(company_row)
