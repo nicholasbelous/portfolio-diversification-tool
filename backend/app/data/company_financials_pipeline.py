@@ -208,6 +208,7 @@ def main() -> None:
 
     print(f"Saved {len(result.saved)} ticker snapshot(s) to {Path(args.output).resolve()}")
     print(f"Postgres database: {redact_database_url(database_url)}")
+    print(f"DB snapshots total: {service.store.count_financial_snapshots()}")
     if result.saved:
         print("Saved:", ", ".join(sorted(result.saved.keys())))
     if result.skipped:

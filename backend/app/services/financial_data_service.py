@@ -550,12 +550,13 @@ class FinancialDataService:
         skipped: List[str] = []
 
         json_store = self._load_json_dict(self.output_path)
+        db_existing_tickers = self.store.fetch_snapshot_tickers()
 
         total = len(cleaned_tickers)
         for index, ticker in enumerate(cleaned_tickers, start=1):
             self._log(f"Processing {index}/{total}: {ticker}")
 
-            if ticker in json_store and not force_refresh:
+            if ticker in db_existing_tickers and ticker in json_store and not force_refresh:
                 skipped.append(ticker)
                 self._log(f"[{ticker}] already present, skipping")
                 continue
@@ -602,6 +603,7 @@ class FinancialDataService:
             )
 
             self._persist_snapshot(snapshot)
+            db_existing_tickers.add(ticker)
             json_store[ticker] = snapshot
             self._save_json_dict(self.output_path, json_store)
             saved[ticker] = snapshot

@@ -28,3 +28,18 @@ python -m app.data.company_financials_pipeline \
   --database-url "postgresql://postgres:postgres@localhost:5432/portfolio_diversification" \
   --from-sp500-reference
 ```
+
+## Full-Load Checklist
+
+1. Generate/refresh ticker universe cache (`sp500_reference.json`) if needed.
+2. Run a one-time full backfill with `--force-refresh` so Postgres is guaranteed to be populated.
+3. Run scheduled incremental refreshes without `--force-refresh` (daily/weekly).
+4. Verify row counts and key coverage:
+
+```sql
+SELECT COUNT(*) AS companies FROM companies;
+SELECT COUNT(*) AS snapshots FROM financial_snapshots;
+SELECT COUNT(*) AS beta_populated
+FROM financial_snapshots
+WHERE beta IS NOT NULL;
+```

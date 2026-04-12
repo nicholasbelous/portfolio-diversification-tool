@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, Set
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -164,3 +164,16 @@ class PostgresStore:
                     """
                 )
                 return cur.fetchall()
+
+    def fetch_snapshot_tickers(self) -> Set[str]:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT ticker FROM financial_snapshots")
+                return {row[0] for row in cur.fetchall()}
+
+    def count_financial_snapshots(self) -> int:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM financial_snapshots")
+                row = cur.fetchone()
+                return int(row[0]) if row else 0
