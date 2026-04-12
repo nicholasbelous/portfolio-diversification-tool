@@ -17,9 +17,8 @@ class DataService:
 
     def _load_data(self):
         if not self.data_path.exists():
-            raise FileNotFoundError(
-                f"company_metadata.json not found at {self.data_path}"
-            )
+            self.company_data = {}
+            return
 
         with open(self.data_path, "r", encoding="utf-8") as f:
             self.company_data = json.load(f)

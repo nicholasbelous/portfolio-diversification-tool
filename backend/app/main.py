@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health
+from app.api.routes import financials, health
 
 app = FastAPI(
     title="Portfolio Diversification API",
@@ -23,6 +23,7 @@ app.add_middleware(
 
 #Registering the routers
 app.include_router(health.router, prefix="/api/v1")
+app.include_router(financials.router, prefix="/api/v1")
 
 
 @app.get("/")
