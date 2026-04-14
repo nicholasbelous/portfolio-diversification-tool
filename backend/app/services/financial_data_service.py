@@ -10,11 +10,7 @@ import pandas as pd
 import requests
 import yfinance as yf
 
-try:
-    from app.db import PostgresStore, get_database_url
-except ModuleNotFoundError:  # pragma: no cover - allows running from repo root
-    from backend.app.db import PostgresStore, get_database_url
-
+from app.db import PostgresStore, get_database_url
 
 @dataclass
 class FinancialFetchResult:

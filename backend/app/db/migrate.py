@@ -1,9 +1,6 @@
 from pathlib import Path
 
-try:
-    from app.db import PostgresStore, get_database_url, redact_database_url
-except ModuleNotFoundError:  # pragma: no cover - allows running from repo root
-    from backend.app.db import PostgresStore, get_database_url, redact_database_url
+from app.db import PostgresStore, get_database_url, redact_database_url
 
 
 def main() -> None:

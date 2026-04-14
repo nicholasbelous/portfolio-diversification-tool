@@ -1,9 +1,16 @@
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set
 
-import psycopg2
-from psycopg2.extras import RealDictCursor, execute_batch
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor, execute_batch
+except ModuleNotFoundError as exc:  # pragma: no cover - import-time guidance
+    if exc.name == "psycopg2":
+        raise ModuleNotFoundError(
+            "Missing dependency 'psycopg2'. Install it with: pip install psycopg2-binary"
+        ) from exc
+    raise
 
 
 class PostgresStore:

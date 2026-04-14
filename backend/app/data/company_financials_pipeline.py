@@ -4,11 +4,7 @@ from pathlib import Path
 from typing import List
 import time
 
-try:
-    from app.db import get_database_url, redact_database_url
-except ModuleNotFoundError:  # pragma: no cover - allows running from repo root
-    from backend.app.db import get_database_url, redact_database_url
-
+from app.db import get_database_url, redact_database_url
 from app.services.financial_data_service import FinancialDataService
 
 
