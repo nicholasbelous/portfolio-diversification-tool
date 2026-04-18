@@ -9,12 +9,27 @@ async function getJson(path) {
   return response.json();
 }
 
-export function fetchSnapshot(ticker) {
-  return getJson(`/financials/${ticker}`);
+async function postJson(path, body) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`${response.status} ${response.statusText}: ${errorText}`);
+  }
+  return response.json();
 }
 
-export function fetchHistory(ticker) {
-  return getJson(`/financials/${ticker}/history?limit=2000`);
+export function analyzePortfolio(payload) {
+  return postJson("/portfolio/analyze", payload);
+}
+
+export function optimizePortfolio(payload) {
+  return postJson("/portfolio/optimize", payload);
 }
 
 export function fetchTopVolatility(limit = 10) {
