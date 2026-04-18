@@ -54,3 +54,22 @@ After running the API (`uvicorn app.main:app --reload`), these are available:
 - `GET /api/v1/financials/top-volatility?limit=25`
 - `GET /api/v1/financials/top-beta?limit=25`
 - `GET /api/v1/financials/{ticker}/history?start_date=2025-01-01&end_date=2026-01-01`
+- `POST /api/v1/portfolio/analyze`
+- `POST /api/v1/portfolio/optimize`
+- `POST /api/v1/portfolio/project`
+
+### Portfolio Request Example
+
+```json
+{
+  "holdings": [
+    {"ticker": "AAPL", "amount": 7000},
+    {"ticker": "MSFT", "amount": 5000},
+    {"ticker": "NVDA", "amount": 3000}
+  ],
+  "max_changes": 5,
+  "transaction_cost_rate": 0.0015,
+  "include_sp500_additions": true,
+  "include_etfs": true
+}
+```

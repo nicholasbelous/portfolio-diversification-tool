@@ -173,6 +173,79 @@ class PostgresStore:
                 )
                 return cur.fetchall()
 
+    def fetch_snapshots_by_tickers(self, tickers: List[str]) -> List[Dict[str, Any]]:
+        if not tickers:
+            return []
+        symbols = sorted({ticker.upper() for ticker in tickers if ticker.strip()})
+        if not symbols:
+            return []
+
+        with self._connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        c.ticker,
+                        c.name,
+                        c.sector,
+                        c.industry,
+                        f.market_cap,
+                        f.beta,
+                        f.trailing_pe,
+                        f.price_to_book,
+                        f.debt_to_equity,
+                        f.profit_margin,
+                        f.latest_close,
+                        f.return_1m,
+                        f.return_3m,
+                        f.return_1y,
+                        f.volatility_1y,
+                        f.source_fundamentals,
+                        f.source_prices,
+                        f.updated_at
+                    FROM financial_snapshots f
+                    JOIN companies c ON c.ticker = f.ticker
+                    WHERE c.ticker = ANY(%s)
+                    ORDER BY c.ticker
+                    """,
+                    (symbols,),
+                )
+                return list(cur.fetchall())
+
+    def fetch_candidate_snapshots_by_market_cap(self, limit: int = 150) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit), 1000))
+        with self._connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        c.ticker,
+                        c.name,
+                        c.sector,
+                        c.industry,
+                        f.market_cap,
+                        f.beta,
+                        f.trailing_pe,
+                        f.price_to_book,
+                        f.debt_to_equity,
+                        f.profit_margin,
+                        f.latest_close,
+                        f.return_1m,
+                        f.return_3m,
+                        f.return_1y,
+                        f.volatility_1y,
+                        f.source_fundamentals,
+                        f.source_prices,
+                        f.updated_at
+                    FROM financial_snapshots f
+                    JOIN companies c ON c.ticker = f.ticker
+                    ORDER BY f.market_cap DESC NULLS LAST
+                    LIMIT %s
+                    """,
+                    (safe_limit,),
+                )
+                return list(cur.fetchall())
+
     def fetch_snapshot_by_ticker(self, ticker: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -305,6 +378,37 @@ class PostgresStore:
             params.append(end_date)
         sql += " ORDER BY trading_date ASC LIMIT %s"
         params.append(safe_limit)
+
+        with self._connect() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(sql, tuple(params))
+                return list(cur.fetchall())
+
+    def fetch_price_history_for_tickers(
+        self,
+        tickers: List[str],
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> List[Dict[str, Any]]:
+        if not tickers:
+            return []
+        symbols = sorted({ticker.upper() for ticker in tickers if ticker.strip()})
+        if not symbols:
+            return []
+
+        sql = """
+            SELECT ticker, trading_date, close
+            FROM price_history_daily
+            WHERE ticker = ANY(%s)
+        """
+        params: List[Any] = [symbols]
+        if start_date is not None:
+            sql += " AND trading_date >= %s"
+            params.append(start_date)
+        if end_date is not None:
+            sql += " AND trading_date <= %s"
+            params.append(end_date)
+        sql += " ORDER BY trading_date ASC, ticker ASC"
 
         with self._connect() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
