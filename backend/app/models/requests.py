@@ -33,3 +33,15 @@ class PortfolioProjectRequest(BaseModel):
     holdings: List[PortfolioHoldingInput] = Field(min_length=1)
     horizon_months: int = Field(default=12, ge=1, le=36)
     simulations: int = Field(default=3000, ge=500, le=20000)
+
+
+class PortfolioTargetWeightInput(BaseModel):
+    ticker: str = Field(min_length=1, description="Ticker symbol")
+    weight: float = Field(ge=0, description="Target portfolio weight (0 to 1)")
+
+
+class PortfolioCompareHistoryRequest(BaseModel):
+    holdings: List[PortfolioHoldingInput] = Field(min_length=1)
+    optimized_weights: Optional[List[PortfolioTargetWeightInput]] = None
+    lookback_days: int = Field(default=504, ge=30, le=2000)
+    include_benchmark: bool = True

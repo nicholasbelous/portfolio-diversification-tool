@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from app.db import PostgresStore, get_database_url
 from app.models.requests import (
     PortfolioAnalyzeRequest,
+    PortfolioCompareHistoryRequest,
     PortfolioOptimizeRequest,
     PortfolioProjectRequest,
 )
@@ -58,6 +59,20 @@ def project_portfolio(payload: PortfolioProjectRequest):
             holdings=payload.holdings,
             horizon_months=payload.horizon_months,
             simulations=payload.simulations,
+        )
+        return {"data": data}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/portfolio/compare-history")
+def compare_history(payload: PortfolioCompareHistoryRequest):
+    try:
+        data = _get_service().compare_portfolio_history(
+            holdings=payload.holdings,
+            optimized_weights=payload.optimized_weights,
+            lookback_days=payload.lookback_days,
+            include_benchmark=payload.include_benchmark,
         )
         return {"data": data}
     except ValueError as exc:

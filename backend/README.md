@@ -57,6 +57,7 @@ After running the API (`uvicorn app.main:app --reload`), these are available:
 - `POST /api/v1/portfolio/analyze`
 - `POST /api/v1/portfolio/optimize`
 - `POST /api/v1/portfolio/project`
+- `POST /api/v1/portfolio/compare-history`
 
 ### Portfolio Request Example
 
@@ -71,5 +72,25 @@ After running the API (`uvicorn app.main:app --reload`), these are available:
   "transaction_cost_rate": 0.0015,
   "include_sp500_additions": true,
   "include_etfs": true
+}
+```
+
+### Portfolio History Compare Example
+
+```json
+{
+  "holdings": [
+    {"ticker": "AAPL", "amount": 7000},
+    {"ticker": "MSFT", "amount": 5000},
+    {"ticker": "NVDA", "amount": 3000}
+  ],
+  "optimized_weights": [
+    {"ticker": "AAPL", "weight": 0.28},
+    {"ticker": "MSFT", "weight": 0.32},
+    {"ticker": "NVDA", "weight": 0.18},
+    {"ticker": "SPY", "weight": 0.22}
+  ],
+  "lookback_days": 504,
+  "include_benchmark": true
 }
 ```

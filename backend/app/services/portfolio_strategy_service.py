@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from app.db import PostgresStore
-from app.models.requests import PortfolioHoldingInput
+from app.models.requests import PortfolioHoldingInput, PortfolioTargetWeightInput
 
 
 ETF_CANDIDATES = ["SPY", "QQQ", "VTI", "IWM", "DIA"]
@@ -142,6 +142,38 @@ class PortfolioStrategyService:
         vec = vec / vec.sum()
         series = returns_matrix[common].to_numpy() @ vec
         return pd.Series(series, index=returns_matrix.index, dtype=float)
+
+    @staticmethod
+    def _normalize_weights_for_columns(
+        weights: Dict[str, float],
+        columns: Sequence[str],
+    ) -> Dict[str, float]:
+        filtered = {t: float(w) for t, w in weights.items() if t in columns and float(w) > 0}
+        total = sum(filtered.values())
+        if total <= 0:
+            return {}
+        return {t: w / total for t, w in filtered.items()}
+
+    @staticmethod
+    def _growth_curve(daily_returns: pd.Series) -> pd.Series:
+        if daily_returns.empty:
+            return pd.Series(dtype=float)
+        return (1.0 + daily_returns).cumprod()
+
+    @staticmethod
+    def _series_to_points(series: pd.Series) -> List[Dict[str, Any]]:
+        if series.empty:
+            return []
+        points: List[Dict[str, Any]] = []
+        for idx, value in series.items():
+            points.append(
+                {
+                    "date": pd.Timestamp(idx).date().isoformat(),
+                    "value": float(value),
+                    "cumulative_return": float(value - 1.0),
+                }
+            )
+        return points
 
     @staticmethod
     def _max_drawdown(daily_returns: pd.Series) -> float | None:
@@ -532,6 +564,11 @@ class PortfolioStrategyService:
             key=lambda x: x["weight"],
             reverse=True,
         )[:15]
+        optimized_weights = sorted(
+            [{"ticker": t, "weight": w} for t, w in optimized_map.items() if w > 1e-8],
+            key=lambda x: x["weight"],
+            reverse=True,
+        )
 
         insights = []
         if (
@@ -589,6 +626,7 @@ class PortfolioStrategyService:
             },
             "projections": projections,
             "optimized_portfolio": top_targets,
+            "optimized_weights": optimized_weights,
             "recommended_changes": recommendations,
             "change_summary": changes,
             "optimizer_diagnostics": {
@@ -624,4 +662,116 @@ class PortfolioStrategyService:
             "projection": projection,
             "metrics": metrics,
             "warnings": normalized.warnings,
+        }
+
+    def compare_portfolio_history(
+        self,
+        holdings: Sequence[PortfolioHoldingInput],
+        optimized_weights: Sequence[PortfolioTargetWeightInput] | None = None,
+        lookback_days: int = 504,
+        include_benchmark: bool = True,
+    ) -> Dict[str, Any]:
+        normalized = self._normalize_portfolio(holdings)
+        warnings = list(normalized.warnings)
+
+        optimized_input: Dict[str, float] = {}
+        if optimized_weights:
+            for row in optimized_weights:
+                ticker = row.ticker.strip().upper()
+                if not ticker:
+                    continue
+                optimized_input[ticker] = optimized_input.get(ticker, 0.0) + float(row.weight)
+
+        universe = set(normalized.weights.keys()) | set(optimized_input.keys())
+        if include_benchmark:
+            universe.add("SPY")
+
+        snapshots = self._snapshot_map(sorted(universe))
+        current_weights = {
+            ticker: weight
+            for ticker, weight in normalized.weights.items()
+            if ticker in snapshots
+        }
+        if not current_weights:
+            raise ValueError("None of the provided holdings were found in snapshot data.")
+        current_weights = {t: w / sum(current_weights.values()) for t, w in current_weights.items()}
+
+        if optimized_input:
+            optimized_base = {
+                ticker: weight
+                for ticker, weight in optimized_input.items()
+                if ticker in snapshots
+            }
+            if optimized_base:
+                optimized_total = sum(optimized_base.values())
+                if optimized_total <= 0:
+                    warnings.append("Optimized weights summed to zero; using current holdings for comparison.")
+                    optimized_map = dict(current_weights)
+                else:
+                    optimized_map = {
+                        t: w / optimized_total
+                        for t, w in optimized_base.items()
+                    }
+            else:
+                warnings.append("No valid optimized weights were provided; using current holdings for comparison.")
+                optimized_map = dict(current_weights)
+        else:
+            warnings.append("No optimized weights provided; using current holdings for comparison.")
+            optimized_map = dict(current_weights)
+
+        history_tickers = sorted(set(current_weights.keys()) | set(optimized_map.keys()))
+        if include_benchmark:
+            history_tickers.append("SPY")
+
+        min_history = max(30, min(180, int(lookback_days)))
+        returns = self._build_returns_matrix(history_tickers, min_history=min_history)
+        if returns.empty:
+            raise ValueError("Insufficient historical data found in price_history_daily for comparison chart.")
+
+        if lookback_days > 0 and returns.shape[0] > lookback_days:
+            returns = returns.tail(lookback_days)
+
+        current_aligned = self._normalize_weights_for_columns(current_weights, list(returns.columns))
+        optimized_aligned = self._normalize_weights_for_columns(optimized_map, list(returns.columns))
+        if not current_aligned or not optimized_aligned:
+            raise ValueError("Portfolio history alignment failed. Verify that holdings exist in history table.")
+
+        current_curve = self._growth_curve(self._portfolio_daily_returns(returns, current_aligned))
+        optimized_curve = self._growth_curve(self._portfolio_daily_returns(returns, optimized_aligned))
+        benchmark_curve = pd.Series(dtype=float)
+        if include_benchmark and "SPY" in returns.columns:
+            benchmark_curve = self._growth_curve(returns["SPY"])
+        elif include_benchmark:
+            warnings.append("SPY benchmark not found in DB history; benchmark line omitted.")
+
+        start_date = None
+        end_date = None
+        if not current_curve.empty:
+            start_date = pd.Timestamp(current_curve.index[0]).date().isoformat()
+            end_date = pd.Timestamp(current_curve.index[-1]).date().isoformat()
+
+        summary = {
+            "current_total_return": None if current_curve.empty else float(current_curve.iloc[-1] - 1.0),
+            "optimized_total_return": None if optimized_curve.empty else float(optimized_curve.iloc[-1] - 1.0),
+            "benchmark_total_return": None if benchmark_curve.empty else float(benchmark_curve.iloc[-1] - 1.0),
+            "optimized_minus_current": (
+                None
+                if current_curve.empty or optimized_curve.empty
+                else float((optimized_curve.iloc[-1] - 1.0) - (current_curve.iloc[-1] - 1.0))
+            ),
+        }
+
+        return {
+            "mode": normalized.mode,
+            "total_value_input": normalized.total_value,
+            "window_days": int(len(current_curve)),
+            "start_date": start_date,
+            "end_date": end_date,
+            "series": {
+                "current": self._series_to_points(current_curve),
+                "optimized": self._series_to_points(optimized_curve),
+                "benchmark": self._series_to_points(benchmark_curve),
+            },
+            "summary": summary,
+            "warnings": warnings,
         }
