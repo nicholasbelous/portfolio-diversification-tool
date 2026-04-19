@@ -32,6 +32,10 @@ export function optimizePortfolio(payload) {
   return postJson("/portfolio/optimize", payload);
 }
 
+export function comparePortfolioHistory(payload) {
+  return postJson("/portfolio/compare-history", payload);
+}
+
 export function fetchTopVolatility(limit = 10) {
   return getJson(`/financials/top-volatility?limit=${limit}`);
 }
