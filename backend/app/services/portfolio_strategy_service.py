@@ -247,12 +247,174 @@ class PortfolioStrategyService:
         return metrics
 
     @staticmethod
-    def _projection_from_daily(daily: pd.Series, horizon_days: int, simulations: int = 3000) -> Dict[str, Any]:
+    def _feature_from_return_window(window: np.ndarray) -> np.ndarray:
+        """
+        Extracts ML features from the most recent return window.
+        Window is expected to be at least 63 observations long.
+        """
+        lag1 = float(window[-1])
+        lag2 = float(window[-2])
+        mean3 = float(np.mean(window[-3:]))
+        mean5 = float(np.mean(window[-5:]))
+        mean21 = float(np.mean(window[-21:]))
+        std5 = float(np.std(window[-5:], ddof=1))
+        std21 = float(np.std(window[-21:], ddof=1))
+        std63 = float(np.std(window[-63:], ddof=1))
+        mom21 = float(np.prod(1.0 + window[-21:]) - 1.0)
+        mom63 = float(np.prod(1.0 + window[-63:]) - 1.0)
+        return np.array(
+            [lag1, lag2, mean3, mean5, mean21, std5, std21, std63, mom21, mom63],
+            dtype=float,
+        )
+
+    def _build_ml_training_data(self, daily: pd.Series) -> tuple[np.ndarray, np.ndarray]:
+        arr = daily.to_numpy(dtype=float)
+        if arr.shape[0] < 90:
+            return np.empty((0, 10), dtype=float), np.empty((0,), dtype=float)
+
+        rows_x: List[np.ndarray] = []
+        rows_y: List[float] = []
+        for t in range(63, arr.shape[0]):
+            window = arr[t - 63 : t]
+            rows_x.append(self._feature_from_return_window(window))
+            rows_y.append(float(arr[t]))
+
+        if not rows_x:
+            return np.empty((0, 10), dtype=float), np.empty((0,), dtype=float)
+        return np.vstack(rows_x), np.array(rows_y, dtype=float)
+
+    @staticmethod
+    def _fit_ridge_regression(x: np.ndarray, y: np.ndarray, l2: float = 1e-2) -> np.ndarray:
+        # Bias term + L2 regularization for stability.
+        x_aug = np.column_stack([np.ones(x.shape[0], dtype=float), x])
+        reg = np.eye(x_aug.shape[1], dtype=float) * float(l2)
+        reg[0, 0] = 0.0  # do not regularize intercept
+        xtx = x_aug.T @ x_aug
+        xty = x_aug.T @ y
+        try:
+            beta = np.linalg.solve(xtx + reg, xty)
+        except np.linalg.LinAlgError:
+            beta = np.linalg.pinv(xtx + reg) @ xty
+        return beta
+
+    @staticmethod
+    def _predict_ridge(x: np.ndarray, beta: np.ndarray) -> np.ndarray:
+        if x.ndim == 1:
+            x = x.reshape(1, -1)
+        x_aug = np.column_stack([np.ones(x.shape[0], dtype=float), x])
+        return x_aug @ beta
+
+    def _projection_from_ml(
+        self,
+        daily: pd.Series,
+        horizon_days: int,
+        simulations: int = 3000,
+    ) -> Dict[str, Any] | None:
+        x, y = self._build_ml_training_data(daily)
+        if x.shape[0] < 80:
+            return None
+
+        test_size = max(20, int(round(x.shape[0] * 0.2)))
+        if x.shape[0] - test_size < 50:
+            test_size = max(10, x.shape[0] // 5)
+        split = x.shape[0] - test_size
+        if split < 30:
+            return None
+
+        x_train, x_test = x[:split], x[split:]
+        y_train, y_test = y[:split], y[split:]
+
+        beta = self._fit_ridge_regression(x_train, y_train, l2=0.05)
+        yhat_train = self._predict_ridge(x_train, beta)
+        yhat_test = self._predict_ridge(x_test, beta)
+
+        residuals = y_train - yhat_train
+        if residuals.shape[0] < 20:
+            residuals = y - self._predict_ridge(x, beta)
+
+        mae_model = float(np.mean(np.abs(y_test - yhat_test)))
+        # Naive baseline: next return ~= last observed return.
+        yhat_naive = x_test[:, 0]
+        mae_naive = float(np.mean(np.abs(y_test - yhat_naive)))
+        var_test = float(np.var(y_test))
+        r2 = None
+        if var_test > 1e-12:
+            r2 = float(1.0 - (np.var(y_test - yhat_test) / var_test))
+
+        improvement_vs_naive = None
+        if mae_naive > 1e-12:
+            improvement_vs_naive = float((mae_naive - mae_model) / mae_naive)
+
+        arr = daily.to_numpy(dtype=float)
+        if arr.shape[0] < 63:
+            return None
+
+        recent_window = arr[-63:]
+        train_vol = float(np.std(y_train, ddof=1)) if y_train.shape[0] > 2 else 0.0
+        train_vol = max(train_vol, 1e-6)
+
+        next_day_feat = self._feature_from_return_window(np.array(recent_window, dtype=float))
+        next_day_pred = float(self._predict_ridge(next_day_feat, beta)[0])
+        recent_pred_values: List[float] = []
+        start_idx = max(63, arr.shape[0] - 21)
+        for t in range(start_idx, arr.shape[0]):
+            recent_feat = self._feature_from_return_window(arr[t - 63 : t])
+            recent_pred_values.append(float(self._predict_ridge(recent_feat, beta)[0]))
+        recent_pred_mean = float(np.mean(recent_pred_values)) if recent_pred_values else next_day_pred
+
+        hist_mean = float(np.mean(y_train))
+        hist_std = float(np.std(y_train, ddof=1)) if y_train.shape[0] > 2 else 0.0
+        hist_std = max(hist_std, 1e-6)
+
+        # Heavy shrinkage toward long-run mean to reduce regime-overfit swings.
+        model_signal = 0.5 * (next_day_pred + recent_pred_mean)
+        drift = hist_mean + (0.10 * (model_signal - hist_mean))
+        drift = float(np.clip(drift, hist_mean - (0.20 * hist_std), hist_mean + (0.20 * hist_std)))
+        residual_std = float(np.std(residuals, ddof=1)) if residuals.shape[0] > 2 else 0.0
+        residual_std = max(residual_std, 1e-6)
+        recent_vol = float(np.std(arr[-21:], ddof=1)) if arr.shape[0] >= 21 else train_vol
+        vol_scale = float(np.clip(recent_vol / train_vol, 0.65, 1.65))
+        sigma_raw = residual_std * vol_scale
+        sigma = float(np.clip((0.70 * sigma_raw) + (0.30 * hist_std), 0.35 * hist_std, 1.60 * hist_std))
+
+        # Fast autoregressive Monte Carlo driven by ML-estimated drift + residual volatility.
+        rng = np.random.default_rng(2026 + horizon_days)
+        ar1 = float(np.clip(beta[1] if beta.shape[0] > 1 else 0.0, -0.20, 0.20))
+        prev_returns = np.full(shape=(simulations,), fill_value=float(arr[-1]), dtype=float)
+        growth = np.ones(shape=(simulations,), dtype=float)
+        for _ in range(horizon_days):
+            shocks = rng.standard_t(df=8, size=simulations) * sigma
+            sim_r = drift + (ar1 * (prev_returns - drift)) + shocks
+            sim_r = np.clip(sim_r, -0.25, 0.25)
+            growth *= (1.0 + sim_r)
+            prev_returns = sim_r
+        sims_terminal = growth - 1.0
+
+        return {
+            "method": "autoregressive_ridge_bootstrap",
+            "horizon_days": int(horizon_days),
+            "training_samples": int(x_train.shape[0]),
+            "validation_samples": int(x_test.shape[0]),
+            "validation_mae_model": mae_model,
+            "validation_mae_naive": mae_naive,
+            "validation_r2": r2,
+            "improvement_vs_naive_pct": improvement_vs_naive,
+            "next_day_expected_return": next_day_pred,
+            "drift_daily": drift,
+            "residual_std_daily": residual_std,
+            "p10": float(np.quantile(sims_terminal, 0.10)),
+            "p50": float(np.quantile(sims_terminal, 0.50)),
+            "p90": float(np.quantile(sims_terminal, 0.90)),
+            "mean": float(np.mean(sims_terminal)),
+        }
+
+    def _projection_from_daily(self, daily: pd.Series, horizon_days: int, simulations: int = 3000) -> Dict[str, Any]:
         if daily.empty:
             return {
                 "horizon_days": horizon_days,
                 "historical": None,
                 "monte_carlo": None,
+                "ml_forecast": None,
             }
 
         hist = (1.0 + daily).rolling(window=horizon_days).apply(np.prod, raw=True) - 1.0
@@ -282,10 +444,17 @@ class PortfolioStrategyService:
             "p90": float(np.quantile(sims_terminal, 0.90)),
             "mean": float(np.mean(sims_terminal)),
         }
+        ml_simulations = max(300, min(int(simulations), 700))
+        ml_summary = self._projection_from_ml(
+            daily=daily,
+            horizon_days=horizon_days,
+            simulations=ml_simulations,
+        )
         return {
             "horizon_days": horizon_days,
             "historical": hist_summary,
             "monte_carlo": mc_summary,
+            "ml_forecast": ml_summary,
         }
 
     def analyze_portfolio(self, holdings: Sequence[PortfolioHoldingInput]) -> Dict[str, Any]:
