@@ -59,6 +59,11 @@ After running the API (`uvicorn app.main:app --reload`), these are available:
 - `POST /api/v1/portfolio/project`
 - `POST /api/v1/portfolio/compare-history`
 
+Projection payloads now include:
+- `historical` (rolling-return distribution)
+- `monte_carlo` (distribution simulation)
+- `ml_forecast` (autoregressive ridge + bootstrapped residual simulation with validation diagnostics)
+
 ### Portfolio Request Example
 
 ```json
