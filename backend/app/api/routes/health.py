@@ -1,13 +1,11 @@
+import logging
 from fastapi import APIRouter
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"])
 
 @router.get("/health")
 async def health_check():
-    """
-    Docstring for health_check
-    Health Chech Endpoint
-    Checking if the API is running properly
-    """
-    
+    """Health check endpoint - confirms API is running properly"""
+    logger.debug("Health check requested")
     return {"status": "healthy"}

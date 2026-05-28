@@ -1,7 +1,8 @@
+import logging
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, status
 
 from app.db import PostgresStore, get_database_url
 from app.models.requests import (
@@ -11,6 +12,8 @@ from app.models.requests import (
     PortfolioProjectRequest,
 )
 from app.services.portfolio_strategy_service import PortfolioStrategyService
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(tags=["portfolio"])
@@ -32,7 +35,17 @@ def analyze_portfolio(payload: PortfolioAnalyzeRequest):
         data = _get_service().analyze_portfolio(payload.holdings)
         return {"data": data}
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning(f"Validation error in analyze_portfolio: {exc}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except TimeoutError as exc:
+        logger.error(f"Timeout in analyze_portfolio: {exc}")
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Request timeout") from exc
+    except MemoryError as exc:
+        logger.error(f"Memory error in analyze_portfolio: {exc}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Service temporarily unavailable") from exc
+    except Exception as exc:
+        logger.error(f"Unexpected error in analyze_portfolio: {exc}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from exc
 
 
 @router.post("/portfolio/optimize")
@@ -49,7 +62,17 @@ def optimize_portfolio(payload: PortfolioOptimizeRequest):
         )
         return {"data": data}
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning(f"Validation error in optimize_portfolio: {exc}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except TimeoutError as exc:
+        logger.error(f"Timeout in optimize_portfolio: {exc}")
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Request timeout") from exc
+    except MemoryError as exc:
+        logger.error(f"Memory error in optimize_portfolio: {exc}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Service temporarily unavailable") from exc
+    except Exception as exc:
+        logger.error(f"Unexpected error in optimize_portfolio: {exc}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from exc
 
 
 @router.post("/portfolio/project")
@@ -62,7 +85,17 @@ def project_portfolio(payload: PortfolioProjectRequest):
         )
         return {"data": data}
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning(f"Validation error in project_portfolio: {exc}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except TimeoutError as exc:
+        logger.error(f"Timeout in project_portfolio: {exc}")
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Request timeout") from exc
+    except MemoryError as exc:
+        logger.error(f"Memory error in project_portfolio: {exc}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Service temporarily unavailable") from exc
+    except Exception as exc:
+        logger.error(f"Unexpected error in project_portfolio: {exc}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from exc
 
 
 @router.post("/portfolio/compare-history")
@@ -76,4 +109,14 @@ def compare_history(payload: PortfolioCompareHistoryRequest):
         )
         return {"data": data}
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.warning(f"Validation error in compare_history: {exc}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except TimeoutError as exc:
+        logger.error(f"Timeout in compare_history: {exc}")
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Request timeout") from exc
+    except MemoryError as exc:
+        logger.error(f"Memory error in compare_history: {exc}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Service temporarily unavailable") from exc
+    except Exception as exc:
+        logger.error(f"Unexpected error in compare_history: {exc}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from exc

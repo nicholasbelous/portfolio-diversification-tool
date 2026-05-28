@@ -1,10 +1,12 @@
 from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set
+import logging
 
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor, execute_batch
+    from psycopg2.pool import SimpleConnectionPool
 except ModuleNotFoundError as exc:  # pragma: no cover - import-time guidance
     if exc.name == "psycopg2":
         raise ModuleNotFoundError(
@@ -12,24 +14,47 @@ except ModuleNotFoundError as exc:  # pragma: no cover - import-time guidance
         ) from exc
     raise
 
+logger = logging.getLogger(__name__)
+
 
 class PostgresStore:
     """
-    Minimal Postgres store with SQL-file migrations and upsert helpers.
+    Postgres store with connection pooling, SQL-file migrations and upsert helpers.
     """
+    
+    # Class-level pool (shared across instances)
+    _pool: Optional[SimpleConnectionPool] = None
+    _pool_params: tuple = None
 
     def __init__(self, database_url: str, migrations_dir: Path):
         self.database_url = database_url
         self.migrations_dir = migrations_dir
+        
+        # Initialize pool on first instance creation
+        if PostgresStore._pool is None:
+            PostgresStore._pool = SimpleConnectionPool(1, 5, database_url)
+            PostgresStore._pool_params = (database_url, migrations_dir)
+            logger.info("Connection pool initialized with 1-5 connections")
+        
         self.migrate()
 
     def _connect(self):
-        return psycopg2.connect(self.database_url)
+        """Get a connection from the pool"""
+        if PostgresStore._pool is None:
+            raise RuntimeError("Connection pool not initialized")
+        return PostgresStore._pool.getconn()
+    
+    def _return_connection(self, conn):
+        """Return a connection to the pool"""
+        if PostgresStore._pool is not None:
+            PostgresStore._pool.putconn(conn)
 
     def migrate(self) -> None:
         self.migrations_dir.mkdir(parents=True, exist_ok=True)
 
-        with self._connect() as conn:
+        conn = None
+        try:
+            conn = self._connect()
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -55,9 +80,20 @@ class PostgresStore:
                         (version,),
                     )
             conn.commit()
+            logger.info(f"Database migrations completed")
+        except Exception as exc:
+            logger.error(f"Migration failed: {exc}", exc_info=True)
+            if conn:
+                conn.rollback()
+            raise
+        finally:
+            if conn:
+                self._return_connection(conn)
 
     def upsert_company(self, company: Dict[str, object]) -> None:
-        with self._connect() as conn:
+        conn = None
+        try:
+            conn = self._connect()
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -78,6 +114,14 @@ class PostgresStore:
                     ),
                 )
             conn.commit()
+        except Exception as exc:
+            logger.error(f"Failed to upsert company: {exc}")
+            if conn:
+                conn.rollback()
+            raise
+        finally:
+            if conn:
+                self._return_connection(conn)
 
     def upsert_financial_snapshot(self, snapshot: Dict[str, object]) -> None:
         with self._connect() as conn:

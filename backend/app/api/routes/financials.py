@@ -1,10 +1,13 @@
+import logging
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.db import PostgresStore, get_database_url
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(tags=["financials"])
@@ -23,24 +26,39 @@ def _get_store() -> PostgresStore:
 def get_top_volatility(
     limit: int = Query(default=25, ge=1, le=200),
 ):
-    rows = _get_store().fetch_top_snapshots(metric="volatility_1y", limit=limit)
-    return {"metric": "volatility_1y", "count": len(rows), "items": rows}
+    try:
+        rows = _get_store().fetch_top_snapshots(metric="volatility_1y", limit=limit)
+        return {"metric": "volatility_1y", "count": len(rows), "items": rows}
+    except Exception as exc:
+        logger.error(f"Error fetching top volatility: {exc}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch data") from exc
 
 
 @router.get("/financials/top-beta")
 def get_top_beta(
     limit: int = Query(default=25, ge=1, le=200),
 ):
-    rows = _get_store().fetch_top_snapshots(metric="beta", limit=limit)
-    return {"metric": "beta", "count": len(rows), "items": rows}
+    try:
+        rows = _get_store().fetch_top_snapshots(metric="beta", limit=limit)
+        return {"metric": "beta", "count": len(rows), "items": rows}
+    except Exception as exc:
+        logger.error(f"Error fetching top beta: {exc}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch data") from exc
 
 
 @router.get("/financials/{ticker}")
 def get_financial_snapshot(ticker: str):
-    row = _get_store().fetch_snapshot_by_ticker(ticker=ticker)
-    if row is None:
-        raise HTTPException(status_code=404, detail=f"Ticker not found: {ticker.upper()}")
-    return row
+    try:
+        row = _get_store().fetch_snapshot_by_ticker(ticker=ticker)
+        if row is None:
+            logger.warning(f"Ticker not found: {ticker.upper()}")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ticker not found: {ticker.upper()}")
+        return row
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Error fetching snapshot for {ticker}: {exc}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch data") from exc
 
 
 @router.get("/financials/{ticker}/history")
