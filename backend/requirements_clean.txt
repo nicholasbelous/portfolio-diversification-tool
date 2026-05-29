@@ -6,13 +6,6 @@ aiosignal
 alabaster
 alpha_vantage==3.0.0
 altair
-anaconda-anon-usage
-anaconda-catalogs
-anaconda-cli-base
-anaconda-client
-anaconda-cloud-auth
-anaconda-navigator
-anaconda-project
 annotated-doc==0.0.4
 annotated-types
 anyio
@@ -42,7 +35,6 @@ black
 bleach
 blinker
 bokeh
-boltons
 botocore
 Bottleneck
 Brotli
@@ -57,16 +49,6 @@ cloudpickle
 colorama
 colorcet
 comm
-conda
-conda-build
-conda-content-trust
-conda-libmamba-solver
-conda-pack
-conda-package-handling
-conda-repo-cli
-conda-token
-conda_index
-conda_package_streaming
 constantly
 contourpy
 cookiecutter
@@ -177,7 +159,6 @@ lazy-object-proxy
 lazy_loader
 lckr_jupyterlab_variableinspector
 libarchive-c
-libmambapy
 linkedin_scraper==2.11.5
 linkify-it-py
 llvmlite
@@ -194,7 +175,6 @@ matplotlib-inline
 mccabe
 mdit-py-plugins
 mdurl
-menuinst
 mistune
 more-itertools
 mpmath
@@ -256,7 +236,6 @@ pyarrow
 pyasn1
 pyasn1_modules
 pycodestyle
-pycosat
 pycparser
 pyct
 pycurl
@@ -328,7 +307,6 @@ rignore==0.7.6
 rope
 rpds-py
 Rtree
-ruamel-yaml-conda
 ruamel.yaml
 ruamel.yaml.clib
 s3fs
