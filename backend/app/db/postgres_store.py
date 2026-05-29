@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set
@@ -21,7 +22,7 @@ class PostgresStore:
     """
     Postgres store with connection pooling, SQL-file migrations and upsert helpers.
     """
-    
+
     # Class-level pool (shared across instances)
     _pool: Optional[SimpleConnectionPool] = None
     _pool_params: tuple = None
@@ -29,99 +30,86 @@ class PostgresStore:
     def __init__(self, database_url: str, migrations_dir: Path):
         self.database_url = database_url
         self.migrations_dir = migrations_dir
-        
+
         # Initialize pool on first instance creation
         if PostgresStore._pool is None:
             PostgresStore._pool = SimpleConnectionPool(1, 5, database_url)
             PostgresStore._pool_params = (database_url, migrations_dir)
             logger.info("Connection pool initialized with 1-5 connections")
-        
+
         self.migrate()
 
+    @contextmanager
     def _connect(self):
-        """Get a connection from the pool"""
+        """Get a connection from the pool and always return it."""
         if PostgresStore._pool is None:
             raise RuntimeError("Connection pool not initialized")
-        return PostgresStore._pool.getconn()
-    
-    def _return_connection(self, conn):
-        """Return a connection to the pool"""
-        if PostgresStore._pool is not None:
+        conn = PostgresStore._pool.getconn()
+        try:
+            yield conn
+        finally:
             PostgresStore._pool.putconn(conn)
 
     def migrate(self) -> None:
         self.migrations_dir.mkdir(parents=True, exist_ok=True)
-
-        conn = None
         try:
-            conn = self._connect()
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS schema_migrations (
-                        version TEXT PRIMARY KEY,
-                        applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    )
-                    """
-                )
-                cur.execute("SELECT version FROM schema_migrations")
-                applied = {row[0] for row in cur.fetchall()}
-
-                migration_files = sorted(self.migrations_dir.glob("*.sql"))
-                for migration_file in migration_files:
-                    version = migration_file.name.split("_", maxsplit=1)[0]
-                    if version in applied:
-                        continue
-
-                    sql_script = migration_file.read_text(encoding="utf-8")
-                    cur.execute(sql_script)
+            with self._connect() as conn:
+                with conn.cursor() as cur:
                     cur.execute(
-                        "INSERT INTO schema_migrations(version) VALUES (%s)",
-                        (version,),
+                        """
+                        CREATE TABLE IF NOT EXISTS schema_migrations (
+                            version TEXT PRIMARY KEY,
+                            applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                        )
+                        """
                     )
-            conn.commit()
-            logger.info(f"Database migrations completed")
+                    cur.execute("SELECT version FROM schema_migrations")
+                    applied = {row[0] for row in cur.fetchall()}
+
+                    migration_files = sorted(self.migrations_dir.glob("*.sql"))
+                    for migration_file in migration_files:
+                        version = migration_file.name.split("_", maxsplit=1)[0]
+                        if version in applied:
+                            continue
+
+                        sql_script = migration_file.read_text(encoding="utf-8")
+                        cur.execute(sql_script)
+                        cur.execute(
+                            "INSERT INTO schema_migrations(version) VALUES (%s)",
+                            (version,),
+                        )
+                conn.commit()
+                logger.info("Database migrations completed")
         except Exception as exc:
             logger.error(f"Migration failed: {exc}", exc_info=True)
-            if conn:
-                conn.rollback()
             raise
-        finally:
-            if conn:
-                self._return_connection(conn)
 
     def upsert_company(self, company: Dict[str, object]) -> None:
-        conn = None
         try:
-            conn = self._connect()
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO companies (ticker, name, sector, industry, updated_at)
-                    VALUES (%s, %s, %s, %s, %s)
-                    ON CONFLICT(ticker) DO UPDATE SET
-                        name = excluded.name,
-                        sector = excluded.sector,
-                        industry = excluded.industry,
-                        updated_at = excluded.updated_at
-                    """,
-                    (
-                        company["ticker"],
-                        company["name"],
-                        company["sector"],
-                        company["industry"],
-                        company["updated_at"],
-                    ),
-                )
-            conn.commit()
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO companies (ticker, name, sector, industry, updated_at)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT(ticker) DO UPDATE SET
+                            name = excluded.name,
+                            sector = excluded.sector,
+                            industry = excluded.industry,
+                            updated_at = excluded.updated_at
+                        """,
+                        (
+                            company["ticker"],
+                            company["name"],
+                            company["sector"],
+                            company["industry"],
+                            company["updated_at"],
+                        ),
+                    )
+                conn.commit()
         except Exception as exc:
             logger.error(f"Failed to upsert company: {exc}")
-            if conn:
-                conn.rollback()
             raise
-        finally:
-            if conn:
-                self._return_connection(conn)
 
     def upsert_financial_snapshot(self, snapshot: Dict[str, object]) -> None:
         with self._connect() as conn:
